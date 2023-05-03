@@ -19,9 +19,9 @@ public:
   std::unique_ptr<BaseAST> func_def;
 
   void Dump() const override {
-    std::cout << "CompUnitAST { ";
+    // std::cout << "CompUnitAST { ";
     func_def->Dump();
-    std::cout << " }";
+    // std::cout << " }";
   }
 };
 
@@ -34,11 +34,11 @@ public:
 
 
  void Dump() const override {
-    std::cout << "FuncDefAST { ";
+    std::cout << "fun ";
+    std::cout << "@" << ident << "(): ";
     func_type->Dump();
-    std::cout << ", " << ident << ", ";
     block->Dump();
-    std::cout << " }";
+    // std::cout << " }";
   }
 };
 
@@ -48,9 +48,9 @@ public:
   std::string functype;
 
   void Dump() const override {
-    std::cout << "FuncTypeAST { ";
-    std::cout << functype;
-    std::cout << " }";
+    // std::cout << "FuncTypeAST { ";
+    // std::cout << functype;
+    std::cout << "i32 ";
   }
 };
 
@@ -59,7 +59,8 @@ public:
   std::unique_ptr<BaseAST> stmt;
 
   void Dump() const override {
-    std::cout << "BlockAST { ";
+    std::cout << "{ ";
+    std::cout << "%entry: ";
     stmt->Dump();
     std::cout << " }";
   }
@@ -69,9 +70,8 @@ class StmtAST : public BaseAST{
  public:
   int number;
   void Dump() const override {
-    std::cout << "StmtAST { ";
+    std::cout << "ret ";
     std::cout << number;
-    std::cout << " }";
   }
 };
 
