@@ -59,10 +59,10 @@ public:
   std::unique_ptr<BaseAST> stmt;
 
   void Dump() const override {
-    std::cout << "{ ";
-    std::cout << "%entry: ";
+    std::cout << "{ " << std::endl;
+    std::cout << "%entry: " << std::endl;
     stmt->Dump();
-    std::cout << " }";
+    std::cout << "}" << std::endl;;
   }
 };
 
@@ -70,8 +70,8 @@ class StmtAST : public BaseAST{
  public:
   int number;
   void Dump() const override {
-    std::cout << "ret ";
-    std::cout << number;
+    std::cout << "  ret ";
+    std::cout << number << std::endl;
   }
 };
 
