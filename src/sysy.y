@@ -42,8 +42,8 @@ using namespace std;
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
-%type <ast_val> FuncDef FuncType Block Stmt
-%type <int_val> Number
+%type <ast_val> FuncDef FuncType Block Stmt Exp AddExp MulExp PrimaryExp UnaryExp UnaryOp Number
+//%type <int_val> Number
 
 %%
 
@@ -97,17 +97,137 @@ Block
   }
   ;
 
+// Stmt
+//   : RETURN Number ';' {
+//     auto ast = new StmtAST();
+//     ast->number = ($2);
+//     $$ = ast;
+//   }
+//   ;
 Stmt
-  : RETURN Number ';' {
+  : RETURN Exp ';'{
     auto ast = new StmtAST();
-    ast->number = ($2);
+    ast->type = Return_Ty;
+    ast->data.return_ty.exp = unique_ptr<BaseAST>($2);
     $$ = ast;
   }
-  ;
+
+/*======================= 3. operation part begin ==================*/
+Exp
+  : AddExp {
+    auto ast = new ExpAST();
+    ast->add_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+
+AddExp
+  : MulExp {
+    auto ast = new AddExpAST();
+    ast->type = Add_MulExp_Ty;
+    ast->data.mulexp_ty.mul_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  | AddExp '+' MulExp{
+    auto ast = new AddExpAST();
+    ast->type = Add_AddExp_Ty;
+    ast->data.addexp_ty.add_exp = unique_ptr<BaseAST>($1);
+    ast->data.addexp_ty.mul_exp = unique_ptr<BaseAST>($3);
+    ast->data.addexp_ty.op = '+';
+    $$ = ast;
+  }
+  | AddExp '-' MulExp{
+    auto ast = new AddExpAST();
+    ast->type = Add_AddExp_Ty;
+    ast->data.addexp_ty.add_exp = unique_ptr<BaseAST>($1);
+    ast->data.addexp_ty.mul_exp = unique_ptr<BaseAST>($3);
+    ast->data.addexp_ty.op = '-';
+    $$ = ast;
+  }
+
+MulExp
+  : UnaryExp {
+    auto ast = new MulExpAST();
+    ast->type = Mul_UnaryExp_Ty;
+    ast->data.unaryexp_ty.unary_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  | MulExp '*' UnaryExp{
+    auto ast = new MulExpAST();
+    ast->type = Mul_MulExp_Ty;
+    ast->data.mulexp_ty.mul_exp = unique_ptr<BaseAST>($1);
+    ast->data.mulexp_ty.unary_exp = unique_ptr<BaseAST>($3);
+    ast->data.mulexp_ty.op = '*';
+    $$ = ast;
+  }
+  | MulExp '/' UnaryExp{
+    auto ast = new MulExpAST();
+    ast->type = Mul_MulExp_Ty;
+    ast->data.mulexp_ty.mul_exp = unique_ptr<BaseAST>($1);
+    ast->data.mulexp_ty.unary_exp = unique_ptr<BaseAST>($3);
+    ast->data.mulexp_ty.op = '/';
+    $$ = ast;
+  }
+  | MulExp '%' UnaryExp{
+    auto ast = new MulExpAST();
+    ast->type = Mul_MulExp_Ty;
+    ast->data.mulexp_ty.mul_exp = unique_ptr<BaseAST>($1);
+    ast->data.mulexp_ty.unary_exp = unique_ptr<BaseAST>($3);
+    ast->data.mulexp_ty.op = '%';
+    $$ = ast;
+  }
+  
+
+UnaryExp
+  : PrimaryExp {
+    auto ast = new UnaryExpAST();
+    ast->type = PrimaryExp_Ty;
+    ast->data.primary_ty.primary_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  | UnaryOp UnaryExp {
+    auto ast = new UnaryExpAST();
+    ast->type = UnaryExp_Ty;
+    ast->data.unary_ty.unary_op = unique_ptr<BaseAST>($1);
+    ast->data.unary_ty.unary_exp = unique_ptr<BaseAST>($2);
+    $$ = ast;
+  }
+
+UnaryOp
+  : '+' {
+    auto ast = new UnaryOpAST();
+    ast->op = '+';
+    $$ = ast; //forget return cause segment false
+  }
+  | '-' {
+    auto ast = new UnaryOpAST();
+    ast->op = '-';
+    $$ = ast;
+  }
+  | '!' {
+    auto ast = new UnaryOpAST();
+    ast->op = '!';
+    $$ = ast;
+  }
+
+PrimaryExp
+  : '(' Exp ')' {
+    auto ast = new PrimaryExpAST();
+    ast->type = Exp_Ty;
+    ast->data.exp_ty.exp = unique_ptr<BaseAST> ($2);
+    $$ = ast;
+  }
+  | Number {
+    auto ast = new PrimaryExpAST();
+    ast->type = Number_Ty;
+    ast->data.number_ty.number = unique_ptr<BaseAST> ($1);
+    $$ = ast;
+  }
 
 Number
   : INT_CONST {
-    $$ = ($1);
+    auto ast = new NumberAST();
+    ast->number = ($1);
+    $$ = ast;
   }
   ;
 
