@@ -4,7 +4,12 @@
 #include <iostream>
 #include <memory>
 #include <string>
+//#include "print.h"
 
+typedef enum {Lor_LAndExp_Ty, Lor_LorExp_Ty} LorExpTy;
+typedef enum {LAnd_EqExp_Ty, LAnd_LAndExp_Ty} LAndExpTy;
+typedef enum {Eq_RelExp_Ty, Eq_EqExp_Ty} EqExpTy;
+typedef enum {Rel_AddExp_Ty, Rel_RelExp_Ty} RelExpTy;
 typedef enum {Add_MulExp_Ty, Add_AddExp_Ty} AddExpTy;
 typedef enum {Mul_UnaryExp_Ty, Mul_MulExp_Ty} MulExpTy;
 typedef enum {PrimaryExp_Ty, UnaryExp_Ty} UnaryExpTy;
@@ -24,6 +29,24 @@ typedef struct para {
 } parameter;
 
 typedef parameter* parameter_t;
+
+void print_operator(const parameter &p1, const parameter &p2);
+//void print_operator(const parameter p1, const parameter p2){
+//  if(p1.is_data == 0) {
+//    std::cout << "%" << p1.p1 << ", ";
+//  }
+//  else {
+//    std::cout << p1.p1 << ", ";
+//  }
+//
+//  if(p2.is_data == 0) {
+//    std::cout << "%" << p2.p1 << std::endl;
+//  }
+//  else {
+//    std::cout << p2.p1 << std::endl;
+//  }
+//}
+
 // 所有 AST 的基类
 class BaseAST {
  public:
@@ -127,11 +150,187 @@ class StmtAST : public BaseAST{
 // Exp -> UnaryExp
 class ExpAST : public BaseAST{
   public:
-    std::unique_ptr<BaseAST> add_exp;
+    std::unique_ptr<BaseAST> lor_exp;
 
     void Dump()const override {} 
     void Dump(parameter_t parameter_) const override {
-        add_exp->Dump(parameter_);
+        lor_exp->Dump(parameter_);
+    }
+};
+
+class LOrExpAST : public BaseAST {
+  public:
+    LorExpTy type;
+    struct {
+      struct {
+        std::unique_ptr<BaseAST> land_exp;
+      }landexp_ty;
+      
+      struct {
+        std::unique_ptr<BaseAST> lor_exp;
+        std::unique_ptr<BaseAST> land_exp;
+      }lorexp_ty;
+    }data;
+
+    void Dump()const override {} 
+    void Dump(parameter_t parameter_) const override {
+      parameter p1, p2;
+      if(type == Lor_LAndExp_Ty){
+        data.landexp_ty.land_exp->Dump(&p1);
+        *parameter_ = p1;
+      }
+      else if(type == Lor_LorExp_Ty){
+        data.lorexp_ty.lor_exp->Dump(&p1);
+        data.lorexp_ty.land_exp->Dump(&p2);
+
+        std::cout << "  %" <<  count++ << " = or ";
+
+        print_operator(p1, p2);
+        std:: cout << " %" << count++ << " = ne 0, %" << count - 2 << std::endl;
+        parameter_->is_data = false;
+        parameter_->p1 = count - 1;
+      }
+    }
+};
+
+class LAndExpAST : public BaseAST {
+  public:
+    LAndExpTy type;
+    struct {
+      struct {
+        std::unique_ptr<BaseAST> eq_exp;
+      }eqexp_ty;
+      
+      struct {
+        std::unique_ptr<BaseAST> land_exp;
+        std::unique_ptr<BaseAST> eq_exp;
+      }landexp_ty;
+    }data;
+
+    void Dump()const override {} 
+    void Dump(parameter_t parameter_) const override {
+      parameter p1, p2;
+      if(type == LAnd_EqExp_Ty){
+        data.eqexp_ty.eq_exp->Dump(&p1);
+        *parameter_ = p1;
+      }
+      else if(type == LAnd_LAndExp_Ty){
+        data.landexp_ty.land_exp->Dump(&p1);
+        data.landexp_ty.eq_exp->Dump(&p2);
+
+//        print_operator(p1, p2);
+
+        //compare first result with 0
+        std::cout << "  %" << count++ << " = ne 0, ";
+        if(p1.is_data == 0){
+          std::cout << "%" << p1.p1 << std::endl;
+        }
+        else{
+          std::cout << p1.p1 << std::endl;
+        }
+
+        //compare second result with 0
+        std::cout << "  %" << count++ << " = ne 0, ";
+        if(p2.is_data == 0){
+          std::cout << "%" << p2.p1 << std::endl;
+        }
+        else{
+          std::cout << p2.p1 << std::endl;
+        }
+        
+        //compute final result
+        std::cout << "  %" << count++ << " = and %" << count-3 << ", %" << count-2 << std::endl;
+        parameter_->is_data = false;
+        parameter_->p1 = count - 1;
+      }
+    }
+};
+
+class EqExpAST : public BaseAST {
+  public:
+    EqExpTy type;
+    struct {
+      struct {
+        std::unique_ptr<BaseAST> rel_exp;
+      }relexp_ty;
+      
+      struct {
+        int op; // 0 for '==', 1 for '!='
+        std::unique_ptr<BaseAST> eq_exp;
+        std::unique_ptr<BaseAST> rel_exp;
+      }eqexp_ty;
+    }data;
+
+    void Dump()const override {} 
+    void Dump(parameter_t parameter_) const override {
+      parameter p1, p2;
+      if(type == Eq_RelExp_Ty){
+        data.relexp_ty.rel_exp->Dump(&p1);
+        *parameter_ = p1;
+      }
+      else if(type == Eq_EqExp_Ty){
+        data.eqexp_ty.eq_exp->Dump(&p1);
+        data.eqexp_ty.rel_exp->Dump(&p2);
+
+        if(data.eqexp_ty.op == 0){
+          std::cout << "  %" << count++ << " = eq ";
+        }
+        else if(data.eqexp_ty.op == 1){
+          std::cout << "  %" << count++ << " = ne ";
+        }
+
+        print_operator(p1, p2);
+
+        parameter_->is_data = false;
+        parameter_->p1 = count - 1;
+      }
+    }
+};
+
+class RelExpAST : public BaseAST {
+  public:
+    RelExpTy type;
+    struct {
+      struct {
+        std::unique_ptr<BaseAST> add_exp;
+      }addexp_ty;
+      
+      struct {
+        int op; // 0 for '<', 1 for '>', 2 for '<=', 3 for '>='
+        std::unique_ptr<BaseAST> rel_exp;
+        std::unique_ptr<BaseAST> add_exp;
+      }relexp_ty;
+    }data;
+
+    void Dump()const override {} 
+    void Dump(parameter_t parameter_) const override {
+      parameter p1, p2;
+      if(type == Rel_AddExp_Ty){
+        data.addexp_ty.add_exp->Dump(&p1);
+        *parameter_ = p1;
+      }
+      else if(type == Rel_RelExp_Ty){
+        data.relexp_ty.rel_exp->Dump(&p1);
+        data.relexp_ty.add_exp->Dump(&p2);
+
+        if(data.relexp_ty.op == 0){
+          std::cout << "  %" << count++ << " = lt ";
+        }
+        else if(data.relexp_ty.op == 1){
+          std::cout << "  %" << count++ << " = gt ";
+        }
+        else if(data.relexp_ty.op == 2){
+          std::cout << "  %" << count++ << " = le ";
+        }
+        else if(data.relexp_ty.op == 3){
+          std::cout << "  %" << count++ << " = ge ";
+        }
+
+        print_operator(p1, p2);
+
+        parameter_->is_data = false;
+        parameter_->p1 = count - 1;
+      }
     }
 };
 
@@ -169,22 +368,23 @@ class AddExpAST : public BaseAST {
           std::cout << "sub ";
         }
 
-        if(p1.is_data == 0){
-          std::cout << "%" << p1.p1 << ", ";
-        }
-        else{
-          std::cout << p1.p1 << ", ";
-        }
+        //if(p1.is_data == 0){
+        //  std::cout << "%" << p1.p1 << ", ";
+        //}
+        //else{
+        //  std::cout << p1.p1 << ", ";
+        //}
 
-        if(p2.is_data == 0) {
-          std::cout << "%" << p2.p1 << std::endl;
-        }
-        else{
-          std::cout << p2.p1 << std::endl;
-        }
+        //if(p2.is_data == 0) {
+        //  std::cout << "%" << p2.p1 << std::endl;
+        //}
+        //else{
+        //  std::cout << p2.p1 << std::endl;
+        //}
+
+        print_operator(p1, p2);
         parameter_->is_data = false;
         parameter_->p1 = count-1;
-          
       }
     } 
 };
@@ -369,5 +569,22 @@ class NumberAST : public BaseAST {
     }
 };
 /*============================================ 3. oprating part end ================================================*/
+
+//void print_operator(const parameter p1, const parameter p2){
+//  if(p1.is_data == 0) {
+//    std::cout << "%" << p1.p1 << ", ";
+//  }
+//  else {
+//    std::cout << p1.p1 << ", ";
+//  }
+//
+//  if(p2.is_data == 0) {
+//    std::cout << "%" << p2.p1 << std::endl;
+//  }
+//  else {
+//    std::cout << p2.p1 << std::endl;
+//  }
+//}
+
 
 #endif

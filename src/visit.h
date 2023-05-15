@@ -20,6 +20,7 @@ void Visit(const koopa_raw_function_t &func);
 void Visit(const koopa_raw_basic_block_t &bb);
 void Visit(const koopa_raw_value_t &value);
 
+//visit for different instruction
 void Visit(const koopa_raw_return_t &val, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_integer_t &val, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_binary_t &val, const koopa_raw_value_t &value);
@@ -176,11 +177,16 @@ void Visit(const koopa_raw_binary_t &val, const koopa_raw_value_t &value){
   else if( val.op == KOOPA_RBO_NOT_EQ ) {
     std::cout << "  snez t" << now << ", t" << now << std::endl;
   }
+  else if( val.op == KOOPA_RBO_GE || val.op == KOOPA_RBO_LE) {
+    std::cout << "t" << now << ", ";
+    print_lrreg(rres, lres);
+  }
   else{
     std::cout << "t" << now << ", ";
     print_lrreg(lres, rres);
   }
   slice2reg[value] = now++;
+  now %= 6;
 }
 
 //function to find the slice value of a statement
