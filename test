@@ -1,0 +1,37 @@
+#!/bin/zsh
+
+if [[ "$1" = "all" ]]
+then
+  i=1
+
+  while [[ $i -le 8 ]]
+  do
+  #if [[ $i -eq 2 ]]
+  #then
+  #  continue
+  #fi
+
+  docker run -it --rm -v /home/powler/compiler/:/root/compiler maxxing/compiler-dev autotest -riscv -s lv${i} /root/compiler > alltest/out$i
+
+  #file="alltest/out$i"
+  while read line
+  do
+    str="${line:0:7}"
+    if [[ "$str" = "running" ]]
+    then
+      #echo "line: $line"
+      str1=${line/PASSED/OK}
+      #echo "str1: $str1"
+      if [[ $line = $str1 ]]
+      then
+        echo "lv$i failed"
+        break
+      fi
+    fi
+  done < "alltest/out$i"
+  #echo "$i finish"
+  let i=i+1
+  done
+else
+  docker run -it --rm -v /home/powler/compiler/:/root/compiler maxxing/compiler-dev autotest -${1} -s lv$2 /root/compiler > out$2
+fi
