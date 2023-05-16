@@ -1,17 +1,16 @@
 #ifndef _VISIT_H_
 #define _VISIT_H_
 
+#include <cassert>
 #include <iostream>
 #include <unordered_map>
 #include "koopa.h"
 
 #define ull unsigned long long
 
-typedef enum {
-  T0, T1, T2, T3, T4, T5, T6, A0, A1, A2, A3, A4, A5, A6, A7} reg;
-int now = 0;
+int stackoff= 0;
 int now_a = 0;
-std::unordered_map<koopa_raw_value_t, int> slice2reg;
+std::unordered_map<koopa_raw_value_t, int> slice2mem;
 // 函数声明略
 // ...
 void Visit(const koopa_raw_program_t &program); 
@@ -24,6 +23,14 @@ void Visit(const koopa_raw_value_t &value);
 void Visit(const koopa_raw_return_t &val, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_integer_t &val, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_binary_t &val, const koopa_raw_value_t &value);
+void Visit(const koopa_raw_store_t &val, const koopa_raw_value_t &value);
+void Visit(const koopa_raw_load_t &val, const koopa_raw_value_t &value);
+void Visit(const koopa_raw_global_alloc_t &val, const koopa_raw_value_t &value);
+
+//get memory needed for this part
+int GetMem(const koopa_raw_slice_t &slice);
+int GetMem(const koopa_raw_basic_block_t &bb);
+int GetMem(const koopa_raw_value_t &value);
 
 void slice_value(koopa_raw_value_t val, int &reg, int now);
 void print_lrreg(int lreg, int rreg);
@@ -71,7 +78,16 @@ void Visit(const koopa_raw_function_t &func) {
   std::cout << "  .globl " << func->name+1 << std::endl;
   std::cout << func->name+1 << ":" << std::endl;
   // 访问所有基本块
+  
+  stackoff = 0;
+  int mem = GetMem(func->bbs);
+  int aligned_mem = (mem + 15) / 16 * 16;
+  //std::cout << "cur stackoff : " << stackoff << std::endl;
+  std::cout << "  addi sp, sp, -" << aligned_mem << std::endl;
   Visit(func->bbs);
+  std::cout << "  addi sp, sp, " << aligned_mem << std::endl;
+  std::cout << "  ret" << std::endl;
+  //assert(stackoff == mem);
 }
 
 // 访问基本块
@@ -99,6 +115,15 @@ void Visit(const koopa_raw_value_t &value) {
       // visit binary instruction
       Visit(kind.data.binary, value);
       break;
+    case KOOPA_RVT_STORE:
+      Visit(kind.data.store, value);
+      break;
+    case KOOPA_RVT_LOAD:
+      Visit(kind.data.load, value);
+      break;
+    case KOOPA_RVT_ALLOC:
+      //Visit(kind.data.store, value);
+      break;
     default:
       // 其他类型暂时遇不到
       assert(false);
@@ -117,10 +142,7 @@ void Visit(const koopa_raw_return_t &val, const koopa_raw_value_t &value){
  if(return_val->kind.tag == KOOPA_RVT_INTEGER)
    std::cout << "  li a" << now_a++ << ", " << return_val->kind.data.integer.value << std::endl;
  else
-   std::cout << "  mv a" << now_a++ << ", t" << slice2reg[return_val] << std::endl;
-
- std::cout << "  ret" << std::endl;
-
+   std::cout << "  lw a" << now_a++ << ", " << slice2mem[return_val] << "(sp)" << std::endl;
 }
 
 void Visit(const koopa_raw_integer_t &val, const koopa_raw_value_t &value){
@@ -128,33 +150,37 @@ void Visit(const koopa_raw_integer_t &val, const koopa_raw_value_t &value){
 
 //visit a binary value
 void Visit(const koopa_raw_binary_t &val, const koopa_raw_value_t &value){
-  int lres = -1;
-  int rres = -1;
-  slice_value(val.lhs, lres, now);
-  slice_value(val.rhs, rres, now + 1);
+  int lres = 0;
+  int rres = 1;
+  slice_value(val.lhs, lres, 0);
+  slice_value(val.rhs, rres, 0);
   std::cout << "  ";
-  switch(val.op){
-    case KOOPA_RBO_NOT_EQ:  std::cout << "xor t" << now << ", "; print_lrreg(lres, rres);break; 
-    case KOOPA_RBO_EQ:      std::cout << "xor t" << now << ", "; print_lrreg(lres, rres);break; 
-    case KOOPA_RBO_GT:      break;
-    case KOOPA_RBO_LT:      break;
-    case KOOPA_RBO_GE:      break;
-    case KOOPA_RBO_LE:      break;
-    case KOOPA_RBO_ADD:     break;
-    case KOOPA_RBO_SUB:     break;
-    case KOOPA_RBO_MUL:     break;
-    case KOOPA_RBO_DIV:     break;
-    case KOOPA_RBO_MOD:     break;
-    case KOOPA_RBO_AND:     break;
-    case KOOPA_RBO_OR:      break;
-    case KOOPA_RBO_XOR:     break;
-    case KOOPA_RBO_SHL:     break;
-    case KOOPA_RBO_SHR:     break;
-    case KOOPA_RBO_SAR:     break;
+  if(val.op == KOOPA_RBO_EQ || val.op == KOOPA_RBO_NOT_EQ){
+    std::cout << "xor t0, " ;
+    print_lrreg(lres, rres);
   }
+  //switch(val.op){
+  //  case KOOPA_RBO_NOT_EQ:  std::cout << "xor t" << now << ", "; print_lrreg(lres, rres);break; 
+  //  case KOOPA_RBO_EQ:      std::cout << "xor t" << now << ", "; print_lrreg(lres, rres);break; 
+  //  case KOOPA_RBO_GT:      break;
+  //  case KOOPA_RBO_LT:      break;
+  //  case KOOPA_RBO_GE:      break;
+  //  case KOOPA_RBO_LE:      break;
+  //  case KOOPA_RBO_ADD:     break;
+  //  case KOOPA_RBO_SUB:     break;
+  //  case KOOPA_RBO_MUL:     break;
+  //  case KOOPA_RBO_DIV:     break;
+  //  case KOOPA_RBO_MOD:     break;
+  //  case KOOPA_RBO_AND:     break;
+  //  case KOOPA_RBO_OR:      break;
+  //  case KOOPA_RBO_XOR:     break;
+  //  case KOOPA_RBO_SHL:     break;
+  //  case KOOPA_RBO_SHR:     break;
+  //  case KOOPA_RBO_SAR:     break;
+  //}
   switch(val.op){
-    case KOOPA_RBO_NOT_EQ:  break;
-    case KOOPA_RBO_EQ:      break;
+    case KOOPA_RBO_NOT_EQ:  std::cout << "snez ";break;
+    case KOOPA_RBO_EQ:      std::cout << "seqz ";break;
     case KOOPA_RBO_GT:      std::cout << "sgt "; break;
     case KOOPA_RBO_LT:      std::cout << "slt "; break;
     case KOOPA_RBO_GE:      std::cout << "slt "; break;
@@ -171,37 +197,108 @@ void Visit(const koopa_raw_binary_t &val, const koopa_raw_value_t &value){
     case KOOPA_RBO_SHR:     std::cout << "srl "; break;
     case KOOPA_RBO_SAR:     std::cout << "sra "; break;
   }
-  if( val.op == KOOPA_RBO_EQ ) {
-    std::cout << "  seqz t" << now << ", t" << now << std::endl;
-  }
-  else if( val.op == KOOPA_RBO_NOT_EQ ) {
-    std::cout << "  snez t" << now << ", t" << now << std::endl;
+  if( val.op == KOOPA_RBO_EQ || val.op == KOOPA_RBO_NOT_EQ) {
+    std::cout << "t0, t0" << std::endl;
   }
   else if( val.op == KOOPA_RBO_GE || val.op == KOOPA_RBO_LE) {
-    std::cout << "t" << now << ", ";
+    std::cout << "t0, " ;
     print_lrreg(rres, lres);
   }
   else{
-    std::cout << "t" << now << ", ";
+    std::cout << "t0, " ;
     print_lrreg(lres, rres);
   }
-  slice2reg[value] = now++;
-  now %= 6;
+
+  std::cout << "  sw t0, " << stackoff << "(sp)" << std::endl;
+  slice2mem[value] = stackoff;
+  stackoff += 4;
+}
+
+//visit a store instruction
+void Visit(const koopa_raw_store_t &val, const koopa_raw_value_t &value){
+  //std::cout << "a store inst" << std::endl;
+  int reg = 0;
+  slice_value(val.value, reg, 0);
+  if(reg == -1){
+    std::cout << "  sw x0, " << slice2mem[val.dest] << "(sp)" << std::endl;
+  }
+  else{
+    std::cout << "  sw t0, " << slice2mem[val.dest] << "(sp)" << std::endl;
+  }
+}
+
+void Visit(const koopa_raw_load_t &val, const koopa_raw_value_t &value){
+  //std::cout << "a load inst" << std::endl;
+  std::cout << "  lw t0, " << slice2mem[val.src] << "(sp)" << std::endl;
+  std::cout << "  sw t0, " << stackoff << "(sp)" << std::endl;
+  slice2mem[value] = stackoff;
+  stackoff += 4;
+}
+void Visit(const koopa_raw_global_alloc_t &val, const koopa_raw_value_t &value){
+  //slice2mem[value] = stackoff;
+  //stackoff += 4;
+}
+
+
+
+/*==================== help function ===================*/
+int GetMem(const koopa_raw_slice_t &slice){
+  int mem = 0, temp;
+  for (size_t i = 0; i < slice.len; ++i) {
+    auto ptr = slice.buffer[i];
+
+    switch (slice.kind) {
+      case KOOPA_RSIK_BASIC_BLOCK:
+        temp = GetMem(reinterpret_cast<koopa_raw_basic_block_t>(ptr));
+        break;
+      case KOOPA_RSIK_VALUE:
+        temp = GetMem(reinterpret_cast<koopa_raw_value_t>(ptr));
+        break;
+      default:
+        assert(false);
+    }
+    mem += temp;
+  }
+  return mem;
+}
+
+int GetMem(const koopa_raw_basic_block_t &bb){
+  return GetMem(bb->insts);
+}
+
+int GetMem(const koopa_raw_value_t &value) {
+  if(value->ty->tag == KOOPA_RTT_UNIT) return 0;
+  else{
+    if(value->kind.tag == KOOPA_RVT_ALLOC){
+      slice2mem[value] = stackoff;
+      stackoff += 4;
+    }
+    return 4;
+  }
+  //const auto &kind = value->kind;
+  //switch (kind.tag) {
+  //  case KOOPA_RVT_RETURN: break;
+  //  case KOOPA_RVT_INTEGER: return 0;
+  //  case KOOPA_RVT_BINARY: return 4;
+  //  case KOOPA_RVT_STORE: break;
+  //  case KOOPA_RVT_LOAD: return 4;
+  //  case KOOPA_RVT_GLOBAL_ALLOC: return 4;
+  //}
+  //return 0;
 }
 
 //function to find the slice value of a statement
-void slice_value(const koopa_raw_value_t val, int &reg, int now){
+void slice_value(const koopa_raw_value_t val, int &reg, int num){
   if(val->kind.tag == KOOPA_RVT_INTEGER){
     if(val->kind.data.integer.value == 0){
       reg = -1;
     }
     else{
-      std::cout << "  li t" << now << ", " << val->kind.data.integer.value << std::endl;
-      reg = now;
+      std::cout << "  li t" << reg << ", " << val->kind.data.integer.value << std::endl;
     }
   }
   else{
-    reg = slice2reg[val];
+    std::cout << "  lw t" << reg << ", " << slice2mem[val] << "(sp)" << std::endl;
   }
 }
 
