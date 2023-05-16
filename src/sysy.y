@@ -43,7 +43,7 @@ using namespace std;
 
 // 非终结符的类型定义
 %type <ast_val> FuncDef FuncType Block Stmt Exp LOrExp LAndExp EqExp RelExp AddExp MulExp PrimaryExp LVal UnaryExp UnaryOp Number
-%type <ast_val> BlockItem Decl ConstDecl BType ConstDef ConstInitVal ConstExp
+%type <ast_val> BlockItem Decl ConstDecl VarDecl BType ConstDef VarDef ConstInitVal InitVal ConstExp
 //%type <int_val> Number
 
 %%
@@ -135,7 +135,14 @@ BlockItem
 Decl 
   : ConstDecl {
     auto ast = new DeclAST();
-    ast->constdecl = unique_ptr<BaseAST>($1);
+    ast->type = Decl_ConstDecl_Ty;
+    ast->data.constdecl_ty.constdecl = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  | VarDecl {
+    auto ast = new DeclAST();
+    ast->type = Decl_VarDecl_Ty;
+    ast->data.vardecl_ty.vardecl = unique_ptr<BaseAST>($1);
     $$ = ast;
   }
 
@@ -144,6 +151,14 @@ ConstDecl
     auto ast = new ConstDeclAST();
     ast->btype = unique_ptr<BaseAST>($2);
     ast->constdef = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  }
+
+VarDecl
+  : BType VarDef ';' {
+    auto ast = new VarDeclAST();
+    ast->btype = unique_ptr<BaseAST>($1);
+    ast->vardef = unique_ptr<BaseAST>($2);
     $$ = ast;
   }
 
@@ -168,6 +183,43 @@ ConstDef
     ast->ident = *unique_ptr<string>($1);
     ast->constinitval = unique_ptr<BaseAST>($3);
     ast->constdef = unique_ptr<BaseAST>($5);
+    $$ = ast;
+  }
+
+VarDef
+  : IDENT {
+    auto ast = new VarDefAST();
+    ast->type = VarDef_noinit_Ty;
+    ast->ident = *unique_ptr<std::string>($1);
+    $$ = ast;
+  }
+  | IDENT '=' InitVal {
+    auto ast = new VarDefAST();
+    ast->type = VarDef_init_Ty;
+    ast->ident = *unique_ptr<std::string>($1);
+    ast->initval = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  }
+  | IDENT ',' VarDef {
+    auto ast = new VarDefAST();
+    ast->type = VarDef_VarDef_noinit_Ty;
+    ast->ident = *unique_ptr<std::string>($1);
+    ast->vardef = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  }
+  | IDENT '=' InitVal ',' VarDef {
+    auto ast = new VarDefAST();
+    ast->type = VarDef_VarDef_init_Ty;
+    ast->ident = *unique_ptr<std::string>($1);
+    ast->initval = unique_ptr<BaseAST>($3);
+    ast->vardef = unique_ptr<BaseAST>($5);
+    $$ = ast;
+  }
+
+InitVal
+  : Exp {
+    auto ast = new InitValAST();
+    ast->exp = unique_ptr<BaseAST>($1);
     $$ = ast;
   }
 
@@ -201,9 +253,16 @@ LVal
 //   }
 //   ;
 Stmt
-  : RETURN Exp ';'{
+  : LVal '=' Exp ';' {
     auto ast = new StmtAST();
-    ast->type = Return_Ty;
+    ast->type = Stmt_LVal_Ty;
+    ast->data.lval_ty.lval = unique_ptr<BaseAST>($1);
+    ast->data.lval_ty.exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  }
+  | RETURN Exp ';'{
+    auto ast = new StmtAST();
+    ast->type = Stmt_Return_Ty;
     ast->data.return_ty.exp = unique_ptr<BaseAST>($2);
     $$ = ast;
   }

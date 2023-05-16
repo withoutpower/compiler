@@ -4,6 +4,7 @@
 #include <cassert>
 #include <iostream>
 #include <memory>
+#include <variant>
 #include <unordered_map>
 #include <string>
 
@@ -15,13 +16,20 @@ typedef enum {Add_MulExp_Ty, Add_AddExp_Ty} AddExpTy;
 typedef enum {Mul_UnaryExp_Ty, Mul_MulExp_Ty} MulExpTy;
 typedef enum {PrimaryExp_Ty, UnaryExp_Ty} UnaryExpTy;
 typedef enum {Exp_Ty, LVal_Ty, Number_Ty} PrimaryExpTy;
-typedef enum {Return_Ty} StmtTy;
+typedef enum {Stmt_Return_Ty, Stmt_LVal_Ty} StmtTy;
 
 typedef enum {BlockItem_Decl_Ty, BlockItem_Stmt_Ty, BlockItem_Block_Decl_Ty, BlockItem_Block_Stmt_Ty} BlockItemTy;
 typedef enum {ConstDef_Single_Ty, ConstDef_Mul_Ty} ConstDefTy;
+typedef enum {Decl_ConstDecl_Ty, Decl_VarDecl_Ty} DeclTy;
+typedef enum {VarDef_init_Ty, VarDef_noinit_Ty, VarDef_VarDef_init_Ty, VarDef_VarDef_noinit_Ty} VarDefTy;
 
+typedef struct _value{
+  int const_val;
+  int variable_val;
+  int is_const;
+}value;
 static int count = 0; //the use of temp
-static std::unordered_map<std::string, int> const_val; //table for const value
+static std::unordered_map<std::string, value> val; //table for const or variable value
 
 typedef struct para {
   bool is_data;
@@ -158,13 +166,17 @@ class StmtAST : public BaseAST{
   
   struct {
     struct {
+      std::unique_ptr<BaseAST> lval;
+      std::unique_ptr<BaseAST> exp;
+    }lval_ty;
+    struct {
         std::unique_ptr<BaseAST> exp;
     }return_ty;
   }data;
 
   void Dump() const override {
     parameter p;   
-    if(type == Return_Ty){
+    if(type == Stmt_Return_Ty){
       data.return_ty.exp->Dump(&p);
       std::cout << "  ";
       if(p.is_data){
@@ -174,6 +186,18 @@ class StmtAST : public BaseAST{
         std::cout << "ret %" << p.p1 << std::endl;
       //std::cout << (p.p1_temp == 1) ? "%" : "@";
       //std::cout << p.p1 << endl;
+    }
+    else if(type == Stmt_LVal_Ty){
+      p.is_data = 1;
+      data.lval_ty.lval->Dump(&p);
+      std::string str = p.str;
+      data.lval_ty.exp->Dump(&p);
+      if(p.is_data == 1){
+        std::cout << "  store " << p.p1 << ", @" << str << std::endl;
+      }
+      else{
+        std::cout << "  store " << "%" << p.p1 << ", @" << str << std::endl;
+      } 
     }
   }
   void Dump(parameter_t parameter_)const override {} 
@@ -186,11 +210,26 @@ class LValAST : public BaseAST {
 
     void Dump()const override {} 
     void Dump(parameter_t parameter_) const override {
-      parameter_->is_data = 1;
-      parameter_->p1 = const_val[ident];
-      parameter_->str = ident;
+      if(parameter_->is_data == 1){
+        parameter_->str = ident;
+        return;
+      }
+
+      if(val[ident].is_const == 1){
+        parameter_->is_data = 1;
+        parameter_->p1 = val[ident].const_val;
+        parameter_->str = ident;
+      }
+      else{
+        std::cout << "  %" << count++ << " = load @" << ident << std::endl;
+        parameter_->is_data = 0;
+        parameter_->p1 = count - 1;
+        parameter_->str = ident;
+      }
     }
-    int CalcConst() const override{return -1;}
+    int CalcConst() const override{
+      return val[ident].const_val;
+    }
 };
 
 /*============================================ 3. oprating part begin ================================================*/
@@ -706,6 +745,7 @@ class PrimaryExpAST : public BaseAST {
         parameter_->p1 = p.p1;
       }
       else if(type == LVal_Ty){
+        p.is_data = 0;
         data.lval_ty.lval->Dump(&p);
         *parameter_ = p;
       }
@@ -720,14 +760,13 @@ class PrimaryExpAST : public BaseAST {
         return data.number_ty.number->CalcConst();
       }
       else if(type == LVal_Ty){
-        //auto identity = reinterpret_cast<LValAST&>(data.lval_ty.lval);
-        parameter p;
-        data.lval_ty.lval->Dump(&p);
-        std::string str = p.str;
-        //std::string str = *(std::string*)data.lval_ty.lval->CalcConst();
-        auto ite = const_val.find(str);
-        assert(ite != const_val.end());
-        return const_val[str];
+        //parameter p;
+        //data.lval_ty.lval->Dump(&p);
+        //std::string str = p.str;
+        //auto ite = const_val.find(str);
+        //assert(ite != const_val.end());
+        //return val[str].is_const ? val[str].const_val : val[str].variable_val;
+        return data.lval_ty.lval->CalcConst();
       }
       else if(type == Exp_Ty){
         return data.exp_ty.exp->CalcConst();
@@ -750,10 +789,23 @@ class NumberAST : public BaseAST {
 /*============================================ 4. variable part begin ================================================*/
 class DeclAST : public BaseAST {
   public:
-    std::unique_ptr<BaseAST> constdecl;
+    DeclTy type;
+
+    struct {
+      struct {
+        std::unique_ptr<BaseAST> constdecl;
+      }constdecl_ty;
+
+      struct {
+        std::unique_ptr<BaseAST> vardecl;
+      }vardecl_ty;
+    }data;
 
     void Dump()const override {
-      constdecl->Dump();
+      if(type == Decl_ConstDecl_Ty)
+        data.constdecl_ty.constdecl->Dump();
+      else
+        data.vardecl_ty.vardecl->Dump();
     } 
     void Dump(parameter_t parameter_) const override {
     }
@@ -771,6 +823,18 @@ class ConstDeclAST : public BaseAST {
     void Dump(parameter_t parameter_) const override {
     }
     int CalcConst() const override{return -1;}
+};
+
+class VarDeclAST : public BaseAST {
+  public:
+    std::unique_ptr<BaseAST> btype;
+    std::unique_ptr<BaseAST> vardef;
+
+    void Dump() const override {
+      vardef->Dump();
+    }
+    void Dump(parameter_t parameter_) const override {}
+    int CalcConst() const override {return -1;}
 };
 
 class BTypeAST : public BaseAST {
@@ -792,7 +856,8 @@ class ConstDefAST : public BaseAST {
     std::unique_ptr<BaseAST> constdef;
 
     void Dump()const override {
-      const_val[ident] = constinitval->CalcConst();
+      val[ident].is_const = 1;
+      val[ident].const_val = constinitval->CalcConst();
       if(type == ConstDef_Mul_Ty){
         constdef->Dump();
       }
@@ -800,6 +865,35 @@ class ConstDefAST : public BaseAST {
     void Dump(parameter_t parameter_) const override {
     }
     int CalcConst() const override{return -1;}
+};
+
+class VarDefAST : public BaseAST {
+  public:
+    VarDefTy type;
+    std::string ident;
+    std::unique_ptr<BaseAST> initval;
+    std::unique_ptr<BaseAST> vardef;
+
+    void Dump() const override {
+      std::cout << "  @" << ident << " = alloc i32" << std::endl;
+      if(type == VarDef_init_Ty || type == VarDef_VarDef_init_Ty){
+        val[ident].is_const = 0;
+        parameter p;
+        initval->Dump(&p);
+        //val[ident].variable_val = initval->Dump();
+        if(p.is_data){
+          std::cout << "  store " << p.p1 << ", @" << ident << std::endl;
+        }
+        else{
+          std::cout << "  store " << "%" << p.p1 << ", @" << ident << std::endl;
+        }
+      }
+      if(type == VarDef_VarDef_noinit_Ty || type == VarDef_VarDef_init_Ty){
+        vardef->Dump();
+      }
+    }
+    void Dump(parameter_t parameter_) const override{}
+    int CalcConst() const override {return -1;}
 };
 
 class ConstInitValAST: public BaseAST {
@@ -813,6 +907,22 @@ class ConstInitValAST: public BaseAST {
       return constexp->CalcConst();
     }
 };
+
+class InitValAST : public BaseAST {
+  public:
+    std::unique_ptr<BaseAST> exp;
+
+    void Dump()const override {} 
+    void Dump(parameter_t parameter_) const override {
+      parameter p;
+      exp->Dump(&p);
+      *parameter_ = p;
+    }
+    int CalcConst() const override{
+      return exp->CalcConst();
+    }
+};
+    
 
 class ConstExpAST: public BaseAST {
   public:
