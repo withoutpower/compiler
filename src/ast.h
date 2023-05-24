@@ -6,6 +6,7 @@
 #include <memory>
 #include <variant>
 #include <unordered_map>
+#include <vector>
 #include <string>
 
 typedef enum {Lor_LAndExp_Ty, Lor_LorExp_Ty} LorExpTy;
@@ -16,7 +17,7 @@ typedef enum {Add_MulExp_Ty, Add_AddExp_Ty} AddExpTy;
 typedef enum {Mul_UnaryExp_Ty, Mul_MulExp_Ty} MulExpTy;
 typedef enum {PrimaryExp_Ty, UnaryExp_Ty} UnaryExpTy;
 typedef enum {Exp_Ty, LVal_Ty, Number_Ty} PrimaryExpTy;
-typedef enum {Stmt_Return_Ty, Stmt_LVal_Ty, Stmt_Exp_Ty, Stmt_Block_Ty} StmtTy;
+typedef enum {Stmt_Block_Ty, Stmt_Exp_Ty, Stmt_Return_Ty, Stmt_LVal_Ty, Stmt_Comma_Ty} StmtTy;
 
 typedef enum {BlockItem_Decl_Ty, BlockItem_Stmt_Ty, BlockItem_Block_Decl_Ty, BlockItem_Block_Stmt_Ty} BlockItemTy;
 typedef enum {ConstDef_Single_Ty, ConstDef_Mul_Ty} ConstDefTy;
@@ -27,9 +28,12 @@ typedef struct _value{
   int const_val;
   int variable_val;
   int is_const;
+  std::string index_str;
 }value;
 static int count = 0; //the use of temp
-static std::unordered_map<std::string, value> val; //table for const or variable value
+
+static std::vector<std::unordered_map<std::string, value>> domain;
+//static std::unordered_map<std::string, value> val; //table for const or variable value
 
 typedef struct para {
   bool is_data;
@@ -45,6 +49,7 @@ typedef struct para {
 typedef parameter* parameter_t;
 
 void print_operator(const parameter &p1, const parameter &p2);
+int GetBlockStr(std::string &str);
 
 // 所有 AST 的基类
 class BaseAST {
@@ -115,7 +120,18 @@ public:
 
   void Dump() const override {
     //std::cout << "{ " << std::endl;
+    
+    if(!blockitem){
+      return;
+    }
+    std::unordered_map<std::string, value> val; 
+    if(!domain.empty()){
+      val = domain.back();
+    }
+    domain.push_back(val);
     blockitem->Dump();
+
+    domain.pop_back();
     //std::cout << "}" << std::endl;
   }
   void Dump(parameter_t parameter_)const override{} 
@@ -166,43 +182,57 @@ class StmtAST : public BaseAST{
   
   struct {
     struct {
+      std::unique_ptr<BaseAST> block;
+    }block_ty;
+    struct {
+      std::unique_ptr<BaseAST> exp;
+    }exp_ty;
+    struct {
       std::unique_ptr<BaseAST> lval;
       std::unique_ptr<BaseAST> exp;
     }lval_ty;
     struct {
-      std::unique_ptr<BaseAST> exp;
+        std::unique_ptr<BaseAST> exp;
     }return_ty;
-    struct {
-      std::unique_ptr<BaseAST> exp;
-    }exp_ty;
-    struct{
-      std::unique_ptr<BaseAST> block;
-    }block_ty;
   }data;
 
   void Dump() const override {
     parameter p;   
-    if(type == Stmt_Return_Ty){   //need extend when exp == nullptr
-      if(data.return_ty.exp == nullptr){
-        std::cout << "ret " << std::endl;
+    if(type == Stmt_Return_Ty){
+      data.return_ty.exp->Dump(&p);
+      std::cout << "  ";
+      if(p.is_data){
+        std::cout << "ret " << p.p1 << std::endl;
       }
-      else{
-        data.return_ty.exp->Dump(&p);
-        std::cout << "  ";
-        if(p.is_data){
-          std::cout << "ret " << p.p1 << std::endl;
-        }
-        else
-          std::cout << "ret %" << p.p1 << std::endl;
-        //std::cout << (p.p1_temp == 1) ? "%" : "@";
-        //std::cout << p.p1 << endl;
-      }
+      else
+        std::cout << "ret %" << p.p1 << std::endl;
+      //std::cout << (p.p1_temp == 1) ? "%" : "@";
+      //std::cout << p.p1 << endl;
     }
     else if(type == Stmt_LVal_Ty){
       p.is_data = 1;
       data.lval_ty.lval->Dump(&p);
       std::string str = p.str;
       data.lval_ty.exp->Dump(&p);
+
+      int index;
+      for(index = domain.size() - 1; index >= 0; --index){
+        if(domain[index].find(str) != domain[index].end()){
+          if(domain[index][str].is_const == 1){
+            //error define a const with a variable
+            //assign to a const value
+          }
+          str = domain[index][str].index_str;
+          break;
+          //return domain[index][ident].const_val;
+        }
+      }
+      //search str's block
+      if(-1 == index){
+        //error, undefined ident str
+        std::cout << "undefine " << str << std::endl;
+      }
+
       if(p.is_data == 1){
         std::cout << "  store " << p.p1 << ", @" << str << std::endl;
       }
@@ -210,16 +240,15 @@ class StmtAST : public BaseAST{
         std::cout << "  store " << "%" << p.p1 << ", @" << str << std::endl;
       } 
     }
-    else if(type == Stmt_Exp_Ty){
-      if(data.exp_ty.exp == nullptr){
-        //do nothing?
-      }
-      else{
-        data.exp_ty.exp->Dump(&p);
-      }
-    }
     else if(type == Stmt_Block_Ty){
       data.block_ty.block->Dump();
+    }
+    else if(type == Stmt_Exp_Ty){
+      parameter p;
+      data.exp_ty.exp->Dump(&p);
+    }
+    else if(type == Stmt_Comma_Ty){
+
     }
   }
   void Dump(parameter_t parameter_)const override {} 
@@ -237,20 +266,46 @@ class LValAST : public BaseAST {
         return;
       }
 
+      int index;
+      for(index = domain.size() - 1; index >= 0; --index){
+        if(domain[index].find(ident) != domain[index].end()){
+          break;
+        }
+      }
+
+      if(index == -1){
+        //error undefined ident
+      }
+
+      auto &val = domain[index];
+
       if(val[ident].is_const == 1){
         parameter_->is_data = 1;
         parameter_->p1 = val[ident].const_val;
         parameter_->str = ident;
       }
       else{
-        std::cout << "  %" << count++ << " = load @" << ident << std::endl;
+        //std::cout << "  %" << count++ << " = load @" << ident << "_" << index+1 << std::endl;
+        std::cout << "  %" << count++ << " = load @" << val[ident].index_str << std::endl;
         parameter_->is_data = 0;
         parameter_->p1 = count - 1;
         parameter_->str = ident;
       }
     }
     int CalcConst() const override{
-      return val[ident].const_val;
+      int index;
+      for(index = domain.size() - 1; index >= 0; --index){
+        if(domain[index].find(ident) != domain[index].end()){
+          if(domain[index][ident].is_const == 1){
+            //error define a const with a variable
+          }
+          return domain[index][ident].const_val;
+        }
+      }
+      if(index == -1){
+        //error undefined ident
+      }
+      return -1;
     }
 };
 
@@ -878,8 +933,16 @@ class ConstDefAST : public BaseAST {
     std::unique_ptr<BaseAST> constdef;
 
     void Dump()const override {
+      auto &val = domain.back();
+      int cur_value = constinitval->CalcConst();
+      std::string cur_str = ident + "_" + std::to_string(domain.size());
+      if((val.find(ident) != val.end()) && val[ident].index_str == cur_str){
+        //error, redefine a variable in same block
+      }
       val[ident].is_const = 1;
-      val[ident].const_val = constinitval->CalcConst();
+      val[ident].const_val = cur_value;
+      val[ident].index_str = cur_str;
+      //domain.push_back(val);
       if(type == ConstDef_Mul_Ty){
         constdef->Dump();
       }
@@ -897,17 +960,25 @@ class VarDefAST : public BaseAST {
     std::unique_ptr<BaseAST> vardef;
 
     void Dump() const override {
-      std::cout << "  @" << ident << " = alloc i32" << std::endl;
+      auto &val = domain.back();
+      std::string cur_str = ident + "_" + std::to_string(domain.size());
+      //std::cout << "cur_str is " << cur_str << std::endl;
+      //std::cout << "  @" << ident << "_" << index << " = alloc i32" << std::endl;
+      std::cout << "  @" << cur_str << " = alloc i32" << std::endl;
+
+      val[ident].is_const = 0; //not a const value
+      val[ident].index_str = cur_str;
+      //domain.push_back(val);
       if(type == VarDef_init_Ty || type == VarDef_VarDef_init_Ty){
-        val[ident].is_const = 0;
         parameter p;
         initval->Dump(&p);
+
         //val[ident].variable_val = initval->Dump();
         if(p.is_data){
-          std::cout << "  store " << p.p1 << ", @" << ident << std::endl;
+          std::cout << "  store " << p.p1 << ", @" << cur_str << std::endl;
         }
         else{
-          std::cout << "  store " << "%" << p.p1 << ", @" << ident << std::endl;
+          std::cout << "  store " << "%" << p.p1 << ", @" << cur_str << std::endl;
         }
       }
       if(type == VarDef_VarDef_noinit_Ty || type == VarDef_VarDef_init_Ty){
