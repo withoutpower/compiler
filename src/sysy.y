@@ -246,12 +246,11 @@ LVal
     
 
 // Stmt
-//   : RETURN Number ';' {
-//     auto ast = new StmtAST();
-//     ast->number = ($2);
-//     $$ = ast;
-//   }
-//   ;
+/* Stmt ::= LVal "=" Exp ";"
+       | [Exp] ";"
+       | Block
+       | "return" [Exp] ";" */
+
 Stmt
   : LVal '=' Exp ';' {
     auto ast = new StmtAST();
@@ -260,10 +259,34 @@ Stmt
     ast->data.lval_ty.exp = unique_ptr<BaseAST>($3);
     $$ = ast;
   }
+  | Exp ';'{
+    auto ast = new StmtAST();
+    ast->type = Stmt_Exp_Ty;
+    ast->data.exp_ty.exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  | ';'{
+    auto ast = new StmtAST();
+    ast->type = Stmt_Exp_Ty;
+    ast->data.exp_ty.exp = unique_ptr<BaseAST>(nullptr);
+    $$ = ast;
+  }
+  | Block{
+    auto ast = new StmtAST();
+    ast->type = Stmt_Block_Ty;
+    ast->data.block_ty.block = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
   | RETURN Exp ';'{
     auto ast = new StmtAST();
     ast->type = Stmt_Return_Ty;
     ast->data.return_ty.exp = unique_ptr<BaseAST>($2);
+    $$ = ast;
+  }
+  | RETURN ';'{
+    auto ast = new StmtAST();
+    ast->type = Stmt_Return_Ty;
+    ast->data.return_ty.exp = unique_ptr<BaseAST>(nullptr);
     $$ = ast;
   }
 

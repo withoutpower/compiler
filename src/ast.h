@@ -16,7 +16,7 @@ typedef enum {Add_MulExp_Ty, Add_AddExp_Ty} AddExpTy;
 typedef enum {Mul_UnaryExp_Ty, Mul_MulExp_Ty} MulExpTy;
 typedef enum {PrimaryExp_Ty, UnaryExp_Ty} UnaryExpTy;
 typedef enum {Exp_Ty, LVal_Ty, Number_Ty} PrimaryExpTy;
-typedef enum {Stmt_Return_Ty, Stmt_LVal_Ty} StmtTy;
+typedef enum {Stmt_Return_Ty, Stmt_LVal_Ty, Stmt_Exp_Ty, Stmt_Block_Ty} StmtTy;
 
 typedef enum {BlockItem_Decl_Ty, BlockItem_Stmt_Ty, BlockItem_Block_Decl_Ty, BlockItem_Block_Stmt_Ty} BlockItemTy;
 typedef enum {ConstDef_Single_Ty, ConstDef_Mul_Ty} ConstDefTy;
@@ -84,6 +84,7 @@ public:
     std::cout << "@" << ident << "(): ";
     func_type->Dump();
     std::cout << "{" << std::endl;
+    std::cout << "%entry: " << std::endl;
     //parameter p;
     block->Dump();
     std::cout << "}" << std::endl;
@@ -114,7 +115,6 @@ public:
 
   void Dump() const override {
     //std::cout << "{ " << std::endl;
-    std::cout << "%entry: " << std::endl;
     blockitem->Dump();
     //std::cout << "}" << std::endl;
   }
@@ -170,22 +170,33 @@ class StmtAST : public BaseAST{
       std::unique_ptr<BaseAST> exp;
     }lval_ty;
     struct {
-        std::unique_ptr<BaseAST> exp;
+      std::unique_ptr<BaseAST> exp;
     }return_ty;
+    struct {
+      std::unique_ptr<BaseAST> exp;
+    }exp_ty;
+    struct{
+      std::unique_ptr<BaseAST> block;
+    }block_ty;
   }data;
 
   void Dump() const override {
     parameter p;   
-    if(type == Stmt_Return_Ty){
-      data.return_ty.exp->Dump(&p);
-      std::cout << "  ";
-      if(p.is_data){
-        std::cout << "ret " << p.p1 << std::endl;
+    if(type == Stmt_Return_Ty){   //need extend when exp == nullptr
+      if(data.return_ty.exp == nullptr){
+        std::cout << "ret " << std::endl;
       }
-      else
-        std::cout << "ret %" << p.p1 << std::endl;
-      //std::cout << (p.p1_temp == 1) ? "%" : "@";
-      //std::cout << p.p1 << endl;
+      else{
+        data.return_ty.exp->Dump(&p);
+        std::cout << "  ";
+        if(p.is_data){
+          std::cout << "ret " << p.p1 << std::endl;
+        }
+        else
+          std::cout << "ret %" << p.p1 << std::endl;
+        //std::cout << (p.p1_temp == 1) ? "%" : "@";
+        //std::cout << p.p1 << endl;
+      }
     }
     else if(type == Stmt_LVal_Ty){
       p.is_data = 1;
@@ -198,6 +209,17 @@ class StmtAST : public BaseAST{
       else{
         std::cout << "  store " << "%" << p.p1 << ", @" << str << std::endl;
       } 
+    }
+    else if(type == Stmt_Exp_Ty){
+      if(data.exp_ty.exp == nullptr){
+        //do nothing?
+      }
+      else{
+        data.exp_ty.exp->Dump(&p);
+      }
+    }
+    else if(type == Stmt_Block_Ty){
+      data.block_ty.block->Dump();
     }
   }
   void Dump(parameter_t parameter_)const override {} 
