@@ -262,7 +262,6 @@ void Visit(const koopa_raw_global_alloc_t &val, const koopa_raw_value_t &value){
   //stackoff += 4;
 }
 
-//for branch and jump
 void Visit(const koopa_raw_branch_t &val, const koopa_raw_value_t &value){
   //std::cout << "branch true: " << val.true_bb->name << "false: " << val.false_bb->name << std::endl; 
   if(val.cond->kind.tag == KOOPA_RVT_INTEGER){

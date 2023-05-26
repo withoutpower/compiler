@@ -37,7 +37,7 @@ using namespace std;
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN CONST LOR LAND EQ NEQ LE GE IF ELSE
+%token INT RETURN CONST WHILE LOR LAND EQ NEQ LE GE IF ELSE BREAK CONTINUE
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 
@@ -267,8 +267,16 @@ Stmt
     ast->data.lval_ty.exp = unique_ptr<BaseAST>($3);
     $$ = ast;
   }
+  | WHILE '(' Exp ')' Stmt {
+    auto ast = new StmtAST();
+    ast->type = Stmt_While_Ty;
+    ast->data.while_ty.exp = unique_ptr<BaseAST>($3);
+    ast->data.while_ty.stmt = unique_ptr<BaseAST>($5);
+    $$ = ast;
+  }
   | Block {
     auto ast = new StmtAST();
+    std::cout << "find a block" << std::endl;
     ast->type = Stmt_Block_Ty;
     ast->data.block_ty.block = unique_ptr<BaseAST>($1);
     $$ = ast;
@@ -292,6 +300,16 @@ Stmt
     ast->data.ifelse_ty.exp = unique_ptr<BaseAST>($3);
     ast->data.ifelse_ty.if_stmt = unique_ptr<BaseAST>($5);
     ast->data.ifelse_ty.else_stmt = unique_ptr<BaseAST>($7);
+    $$ = ast;
+  }
+  | BREAK ';'{
+    auto ast = new StmtAST();
+    ast->type = Stmt_Break_Ty;
+    $$ = ast;
+  }
+  | CONTINUE ';'{
+    auto ast = new StmtAST();
+    ast->type = Stmt_Continue_Ty;
     $$ = ast;
   }
   | ';' {

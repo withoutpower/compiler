@@ -9,6 +9,7 @@
 #include <vector>
 #include <string>
 
+//define difference type for the same noe-terminal AST
 typedef enum {Lor_LAndExp_Ty, Lor_LorExp_Ty} LorExpTy;
 typedef enum {LAnd_EqExp_Ty, LAnd_LAndExp_Ty} LAndExpTy;
 typedef enum {Eq_RelExp_Ty, Eq_EqExp_Ty} EqExpTy;
@@ -17,29 +18,35 @@ typedef enum {Add_MulExp_Ty, Add_AddExp_Ty} AddExpTy;
 typedef enum {Mul_UnaryExp_Ty, Mul_MulExp_Ty} MulExpTy;
 typedef enum {PrimaryExp_Ty, UnaryExp_Ty} UnaryExpTy;
 typedef enum {Exp_Ty, LVal_Ty, Number_Ty} PrimaryExpTy;
-typedef enum {Stmt_Block_Ty, Stmt_Exp_Ty, Stmt_Return_Ty, Stmt_LVal_Ty, Stmt_Comma_Ty, Stmt_If_Ty, Stmt_If_Else_Ty} StmtTy;
+typedef enum {Stmt_Block_Ty, Stmt_Exp_Ty, Stmt_Return_Ty, Stmt_LVal_Ty, Stmt_Comma_Ty, Stmt_If_Ty, Stmt_If_Else_Ty, Stmt_While_Ty, Stmt_Break_Ty, Stmt_Continue_Ty} StmtTy;
 
 typedef enum {BlockItem_Decl_Ty, BlockItem_Stmt_Ty, BlockItem_Block_Decl_Ty, BlockItem_Block_Stmt_Ty} BlockItemTy;
 typedef enum {ConstDef_Single_Ty, ConstDef_Mul_Ty} ConstDefTy;
 typedef enum {Decl_ConstDecl_Ty, Decl_VarDecl_Ty} DeclTy;
 typedef enum {VarDef_init_Ty, VarDef_noinit_Ty, VarDef_VarDef_init_Ty, VarDef_VarDef_noinit_Ty} VarDefTy;
 
+//struct for a variable or a const
 typedef struct _value{
-  int const_val;
-  int variable_val;
-  int is_const;
-  std::string index_str;
+  int const_val;          //if const, const value
+  int variable_val;       //unused
+  int is_const;           //whether this value is const
+  std::string index_str;  //indentify for this value in koopa
 }value;
 
-static int count = 0; //the use of temp
+static int count = 0; //the use of temp in koopa like %1, %2
 
 static int if_count = 0;
 static int block_end = 0;
 
+static std::vector<int> while_nest;
+
+//this is the symbol table for a function, which can has multiple block which corresponding to a map in this vector
+//each map record current block, the map from ident to value(integer for a const and string in koopa for a variable)
 static std::vector<std::unordered_map<std::string, value>> domain;
 static int ident_num = 0;
 //static std::unordered_map<std::string, value> val; //table for const or variable value
 
+//struct to transfer temp result for Dump function to get result of sub expression
 typedef struct para {
   bool is_data;
   int p1_temp;
@@ -48,22 +55,22 @@ typedef struct para {
   int p1;
   int p2;
   int p3;
-  std::string str;
+  std::string str; // this is particularly design for LVal to get identifier which cannot implemented by Dump or parameter;
 } parameter;
 
 typedef parameter* parameter_t;
 
-void print_operator(const parameter &p1, const parameter &p2);
-int GetBlockStr(std::string &str);
+void print_operator(const parameter &p1, const parameter &p2);//function to print operator for a koopaIR clause
+int GetBlockStr(std::string &str); //get the IR indet in map of the correct block for a particular identifier 
 
 // 所有 AST 的基类
 class BaseAST {
  public:
   virtual ~BaseAST() = default;
 
-  virtual void Dump() const = 0;
-  virtual void Dump(parameter_t parameter_) const = 0;
-  virtual int CalcConst() const = 0;
+  virtual void Dump() const = 0; //call when generate code
+  virtual void Dump(parameter_t parameter_) const = 0; //call when generate code and need result
+  virtual int CalcConst() const = 0; //calculate value for a expression
 };
 
 // CompUnit 是 BaseAST
@@ -82,21 +89,23 @@ public:
 };
 
 // FuncDef 也是 BaseAST
+// FuncDef -> FuncType IDENT "(" ")" Block
 class FuncDefAST : public BaseAST {
 public:
-  std::unique_ptr<BaseAST> func_type;
-  std::string ident;
-  std::unique_ptr<BaseAST> block;
+  std::unique_ptr<BaseAST> func_type; //function type
+  std::string ident;                  //function name
+  std::unique_ptr<BaseAST> block;     //block in this function
 
 
  void Dump() const override {
+    //output information for this function
     std::cout << "fun ";
     std::cout << "@" << ident << "(): ";
     func_type->Dump();
     std::cout << "{" << std::endl;
     std::cout << "%entry: " << std::endl;
     //parameter p;
-    block->Dump();
+    block->Dump(); //call Dump to transfer the block into code
     std::cout << "}" << std::endl;
     // std::cout << " }";
   }
@@ -104,10 +113,11 @@ public:
   int CalcConst() const override{return 0;}
 };
 
-//
+// FuncType ->  "VOID"
+//          |   "INT"
 class FuncTypeAST : public BaseAST {
 public:
-  std::string functype;
+  std::string functype; //the function type
 
   void Dump() const override {
     // std::cout << "FuncTypeAST { ";
@@ -118,6 +128,8 @@ public:
   int CalcConst() const override{return 0;}
 };
 
+//Block ->  "{" BlockItem "}"
+//      |   "{" "}"
 class BlockAST : public BaseAST{
 public:
 
@@ -143,6 +155,10 @@ public:
   int CalcConst() const override{return -1;}
 };
 
+//BlockItem ->  Decl
+//          |   Stmt
+//          |   BlockItem Decl
+//          |   BlockItem Stmt
 class BlockItemAST : public BaseAST{
   public:
     BlockItemTy type;
@@ -180,7 +196,11 @@ class BlockItemAST : public BaseAST{
 };
 
 
-// Stmt -> "return" Exp ";"
+// Stmt ->  RETURN Exp ";"
+//      |   Block
+//      |   Exp ";"
+//      |   ";"
+//      |   LVal "=" Exp ";"
 class StmtAST : public BaseAST{
  public:
   StmtTy type;
@@ -205,6 +225,10 @@ class StmtAST : public BaseAST{
       std::unique_ptr<BaseAST> exp;
       std::unique_ptr<BaseAST> if_stmt;
     }if_ty;
+    struct {
+      std::unique_ptr<BaseAST> exp;
+      std::unique_ptr<BaseAST> stmt;
+    }while_ty;
     struct {
         std::unique_ptr<BaseAST> exp;
     }return_ty;
@@ -259,6 +283,8 @@ class StmtAST : public BaseAST{
       } 
     }
     else if(type == Stmt_Block_Ty){
+      if(!data.block_ty.block)
+        std::cout << "null block" << std::endl;
       data.block_ty.block->Dump();
     }
     else if(type == Stmt_Exp_Ty){
@@ -333,7 +359,51 @@ class StmtAST : public BaseAST{
       //if_count++;
       //block_end = 0;
     }
+    else if(type == Stmt_While_Ty){
+      if(block_end)
+        return;
+      int cur_while = if_count;
+      if_count++;
+
+      std::cout << "  jump %while_entry_" << cur_while << std::endl;
+      std::cout << "%while_entry_" << cur_while << ":" << std::endl;
+      parameter p;
+      data.while_ty.exp->Dump(&p);
       
+      if(p.is_data){
+        std::cout << "  br " << p.p1 << ", %while_body_" << cur_while << ", %while_end_" << cur_while << std::endl;
+      }
+      else{
+        std::cout << "  br %" << p.p1 << ", %while_body_" << cur_while << ", %while_end_" << cur_while << std::endl;
+      }
+
+      while_nest.push_back(cur_while);
+      std::cout << "%while_body_" << cur_while << ":" << std::endl;
+      data.while_ty.stmt->Dump();
+      if(!block_end){
+        std::cout << "  jump %while_entry_" << cur_while << std::endl;
+      }
+      while_nest.pop_back();
+      std::cout << "%while_end_" << cur_while << ":" << std::endl;
+      block_end = 0;
+    }
+
+    else if(type == Stmt_Break_Ty){
+      if(while_nest.empty()){
+        //error, a break not in while
+
+      }
+      std::cout << "  jump %while_end_" << while_nest.back() << std::endl;
+      block_end = 1;
+    }
+    else if(type == Stmt_Continue_Ty){
+      if(while_nest.empty()){
+        //error, a break not in while
+
+      }
+      std::cout << "  jump %while_entry_" << while_nest.back() << std::endl;
+      block_end = 1;
+    }
 
     else if(type == Stmt_Comma_Ty){
       
@@ -343,6 +413,7 @@ class StmtAST : public BaseAST{
   int CalcConst() const override{return 0;}
 };
 
+// LVal ->  IDENT
 class LValAST : public BaseAST {
   public:
     std::string ident;
@@ -414,6 +485,8 @@ class ExpAST : public BaseAST{
     }
 };
 
+// LOrExp ->  LAndExp
+//        |   LOrExp LOR LAndExp
 class LOrExpAST : public BaseAST {
   public:
     LorExpTy type;
@@ -458,6 +531,8 @@ class LOrExpAST : public BaseAST {
     }
 };
 
+// LAndExp -> EqExp
+//         |  LAndExp LAND EqExp
 class LAndExpAST : public BaseAST {
   public:
     LAndExpTy type;
@@ -520,6 +595,8 @@ class LAndExpAST : public BaseAST {
     }
 };
 
+//  EqExp ->  RelExp
+//        |   EqExp EQ RelExp
 class EqExpAST : public BaseAST {
   public:
     EqExpTy type;
@@ -577,6 +654,11 @@ class EqExpAST : public BaseAST {
     }
 };
 
+// RelExp -> AddExp
+//        |  RelExp "<" AddExp
+//        |  RelExp ">" AddExp
+//        |  RelExp LE  AddExp
+//        |  RelExp GE  AddExp
 class RelExpAST : public BaseAST {
   public:
     RelExpTy type;
@@ -647,6 +729,9 @@ class RelExpAST : public BaseAST {
     }
 };
 
+// AddExp -> MulExp
+//        |  AddExp "+" MulExp
+//        |  AddExp "-" MulExp
 class AddExpAST : public BaseAST {
   public:
     AddExpTy type;
@@ -706,6 +791,10 @@ class AddExpAST : public BaseAST {
     }
 };
 
+// MulExp -> UnaryExp
+//        |  MulExp "*" UnaryExp
+//        |  MulExp "/" UnaryExp
+//        |  MulExp "%" UnaryExp
 class MulExpAST : public BaseAST {
   public:
     MulExpTy type;
@@ -785,7 +874,8 @@ class MulExpAST : public BaseAST {
 
 
 // ast for unaryexp
-// UnaryExp -> PrimaryExp | UnaryOp UnaryExp
+// UnaryExp -> PrimaryExp 
+//          |  UnaryOp UnaryExp
 class UnaryExpAST : public BaseAST {
   public:
     UnaryExpTy type;
@@ -882,7 +972,8 @@ class UnaryOpAST : public BaseAST {
 };
 
 // ast for PrimaryExp
-// PrimaryExp -> "(" Exp ")" | Number
+// PrimaryExp -> "(" Exp ")" 
+//            |   Number
 class PrimaryExpAST : public BaseAST {
   public:
     PrimaryExpTy type;
