@@ -9,6 +9,7 @@
 #define ull unsigned long long
 
 int stackoff= 0;
+int func_stack_mem;
 int now_a = 0;
 std::unordered_map<koopa_raw_value_t, int> slice2mem;
 // 函数声明略
@@ -26,6 +27,8 @@ void Visit(const koopa_raw_binary_t &val, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_store_t &val, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_load_t &val, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_global_alloc_t &val, const koopa_raw_value_t &value);
+void Visit(const koopa_raw_branch_t &val, const koopa_raw_value_t &value);
+void Visit(const koopa_raw_jump_t &val, const koopa_raw_value_t &value);
 
 //get memory needed for this part
 int GetMem(const koopa_raw_slice_t &slice);
@@ -83,10 +86,13 @@ void Visit(const koopa_raw_function_t &func) {
   int mem = GetMem(func->bbs);
   int aligned_mem = (mem + 15) / 16 * 16;
   //std::cout << "cur stackoff : " << stackoff << std::endl;
-  std::cout << "  addi sp, sp, -" << aligned_mem << std::endl;
+  func_stack_mem = aligned_mem;
+  if(func_stack_mem){
+    std::cout << "  addi sp, sp, -" << func_stack_mem << std::endl;
+  }
   Visit(func->bbs);
-  std::cout << "  addi sp, sp, " << aligned_mem << std::endl;
-  std::cout << "  ret" << std::endl;
+  //std::cout << "  addi sp, sp, " << aligned_mem << std::endl;
+  //std::cout << "  ret" << std::endl;
   //assert(stackoff == mem);
 }
 
@@ -95,6 +101,7 @@ void Visit(const koopa_raw_basic_block_t &bb) {
   // 执行一些其他的必要操作
   // ...
   // 访问所有指令
+  std::cout << bb->name+1 << ":" << std::endl;
   Visit(bb->insts);
 }
 
@@ -124,6 +131,12 @@ void Visit(const koopa_raw_value_t &value) {
     case KOOPA_RVT_ALLOC:
       //Visit(kind.data.store, value);
       break;
+    case KOOPA_RVT_BRANCH:
+      Visit(kind.data.branch, value);
+      break;
+    case KOOPA_RVT_JUMP:
+      Visit(kind.data.jump, value);
+      break;
     default:
       // 其他类型暂时遇不到
       assert(false);
@@ -138,11 +151,21 @@ void Visit(const koopa_raw_value_t &value) {
 void Visit(const koopa_raw_return_t &val, const koopa_raw_value_t &value){
 //  std::cout << "    li " << "a0 , " << val.value->kind.data.integer.value << std::endl;
  // std::cout << "    ret" << std::endl;
- koopa_raw_value_t return_val = val.value;
- if(return_val->kind.tag == KOOPA_RVT_INTEGER)
-   std::cout << "  li a" << now_a++ << ", " << return_val->kind.data.integer.value << std::endl;
- else
-   std::cout << "  lw a" << now_a++ << ", " << slice2mem[return_val] << "(sp)" << std::endl;
+
+  koopa_raw_value_t return_val = val.value;
+  int ret = 0;
+  if(return_val->kind.tag == KOOPA_RVT_INTEGER){
+   //std::cout << "  li a" << now_a++ << ", " << return_val->kind.data.integer.value << std::endl;
+    std::cout << "  li a" << ret++ << ", " << return_val->kind.data.integer.value << std::endl;
+  }
+  else{
+   //std::cout << "  lw a" << now_a++ << ", " << slice2mem[return_val] << "(sp)" << std::endl;
+    std::cout << "  lw a" << ret++ << ", " << slice2mem[return_val] << "(sp)" << std::endl;
+  }
+  if(func_stack_mem){
+    std::cout << "  addi sp, sp, " << func_stack_mem << std::endl;
+  }
+  std::cout << "  ret" << std::endl;
 }
 
 void Visit(const koopa_raw_integer_t &val, const koopa_raw_value_t &value){
@@ -239,6 +262,23 @@ void Visit(const koopa_raw_global_alloc_t &val, const koopa_raw_value_t &value){
   //stackoff += 4;
 }
 
+//for branch and jump
+void Visit(const koopa_raw_branch_t &val, const koopa_raw_value_t &value){
+  //std::cout << "branch true: " << val.true_bb->name << "false: " << val.false_bb->name << std::endl; 
+  if(val.cond->kind.tag == KOOPA_RVT_INTEGER){
+    std::cout << "  li t0, " << val.cond->kind.data.integer.value << std::endl;
+  }
+  else{
+    std::cout << "  lw t0, " << slice2mem[val.cond] << "(sp)" << std::endl;
+  }
+  std::cout << "  bnez t0, " << (val.true_bb->name)+1 << std::endl;
+  std::cout << "  j " << (val.false_bb->name)+1 << std::endl;
+
+}
+
+void Visit(const koopa_raw_jump_t &val, const koopa_raw_value_t &value){
+  std::cout << "  j " << (val.target->name)+1 << std::endl;
+}
 
 
 /*==================== help function ===================*/
