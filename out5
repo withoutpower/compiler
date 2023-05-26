@@ -1,0 +1,4 @@
+run test in "-riscv" mode
+working directory: /tmp/tmp7ksh80hg
+repository "/root/compiler" does not contain any build configurations
+failed to compile the repository "/root/compiler"

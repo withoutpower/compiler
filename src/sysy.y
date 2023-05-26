@@ -103,6 +103,11 @@ Block
     ast->blockitem = unique_ptr<BaseAST>($2);
     $$ = ast;
   }
+  | '{' '}'{
+    auto ast = new BlockAST();
+    ast->blockitem = NULL;
+    $$ = ast;
+  }
 
 BlockItem
   : Decl {
@@ -258,6 +263,23 @@ Stmt
     ast->type = Stmt_LVal_Ty;
     ast->data.lval_ty.lval = unique_ptr<BaseAST>($1);
     ast->data.lval_ty.exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  }
+  | Block {
+    auto ast = new StmtAST();
+    ast->type = Stmt_Block_Ty;
+    ast->data.block_ty.block = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  | Exp ';' {
+    auto ast = new StmtAST();
+    ast->type = Stmt_Exp_Ty;
+    ast->data.exp_ty.exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  | ';' {
+    auto ast = new StmtAST();
+    ast->type = Stmt_Comma_Ty;
     $$ = ast;
   }
   | RETURN Exp ';'{
