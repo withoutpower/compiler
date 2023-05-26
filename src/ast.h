@@ -30,11 +30,14 @@ typedef struct _value{
   int is_const;
   std::string index_str;
 }value;
+
 static int count = 0; //the use of temp
+
 static int if_count = 0;
 static int block_end = 0;
 
 static std::vector<std::unordered_map<std::string, value>> domain;
+static int ident_num = 0;
 //static std::unordered_map<std::string, value> val; //table for const or variable value
 
 typedef struct para {
@@ -1023,7 +1026,7 @@ class ConstDefAST : public BaseAST {
     void Dump()const override {
       auto &val = domain.back();
       int cur_value = constinitval->CalcConst();
-      std::string cur_str = ident + "_" + std::to_string(domain.size());
+      std::string cur_str = ident + "_" + std::to_string(domain.size()) + "_" + std::to_string(ident_num++);
       if((val.find(ident) != val.end()) && val[ident].index_str == cur_str){
         //error, redefine a variable in same block
       }
@@ -1049,7 +1052,7 @@ class VarDefAST : public BaseAST {
 
     void Dump() const override {
       auto &val = domain.back();
-      std::string cur_str = ident + "_" + std::to_string(domain.size());
+      std::string cur_str = ident + "_" + std::to_string(domain.size()) + "_" + std::to_string(ident_num++);
       //std::cout << "cur_str is " << cur_str << std::endl;
       //std::cout << "  @" << ident << "_" << index << " = alloc i32" << std::endl;
       std::cout << "  @" << cur_str << " = alloc i32" << std::endl;
@@ -1116,9 +1119,5 @@ class ConstExpAST: public BaseAST {
       return exp->CalcConst();
     }
 };
-
-
-
-
 
 #endif
