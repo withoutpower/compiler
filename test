@@ -11,7 +11,7 @@ then
   #  continue
   #fi
 
-  docker run -it --rm -v /home/powler/compiler/:/root/compiler maxxing/compiler-dev autotest -riscv -s lv${i} /root/compiler > alltest/out$i
+  docker run -it --rm -v $(pwd):/root/compiler maxxing/compiler-dev autotest -riscv -s lv${i} /root/compiler > alltest/out$i
 
   #file="alltest/out$i"
   while read line
@@ -33,5 +33,5 @@ then
   let i=i+1
   done
 else
-  docker run -it --rm -v /home/powler/compiler/:/root/compiler maxxing/compiler-dev autotest -${1} -s lv$2 /root/compiler > out$2
+  docker run -it --rm -v $(pwd):/root/compiler maxxing/compiler-dev autotest -${1} -s lv$2 /root/compiler > out$2
 fi
