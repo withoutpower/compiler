@@ -17,7 +17,7 @@ typedef enum {Add_MulExp_Ty, Add_AddExp_Ty} AddExpTy;
 typedef enum {Mul_UnaryExp_Ty, Mul_MulExp_Ty} MulExpTy;
 typedef enum {PrimaryExp_Ty, UnaryExp_Ty} UnaryExpTy;
 typedef enum {Exp_Ty, LVal_Ty, Number_Ty} PrimaryExpTy;
-typedef enum {Stmt_Block_Ty, Stmt_Exp_Ty, Stmt_Return_Ty, Stmt_LVal_Ty, Stmt_Comma_Ty} StmtTy;
+typedef enum {Stmt_Block_Ty, Stmt_Exp_Ty, Stmt_Return_Ty, Stmt_LVal_Ty, Stmt_Comma_Ty, Stmt_If_Ty, Stmt_If_Else_Ty} StmtTy;
 
 typedef enum {BlockItem_Decl_Ty, BlockItem_Stmt_Ty, BlockItem_Block_Decl_Ty, BlockItem_Block_Stmt_Ty} BlockItemTy;
 typedef enum {ConstDef_Single_Ty, ConstDef_Mul_Ty} ConstDefTy;
@@ -31,6 +31,8 @@ typedef struct _value{
   std::string index_str;
 }value;
 static int count = 0; //the use of temp
+static int if_count = 0;
+static int block_end = 0;
 
 static std::vector<std::unordered_map<std::string, value>> domain;
 //static std::unordered_map<std::string, value> val; //table for const or variable value
@@ -192,11 +194,23 @@ class StmtAST : public BaseAST{
       std::unique_ptr<BaseAST> exp;
     }lval_ty;
     struct {
+      std::unique_ptr<BaseAST> exp;
+      std::unique_ptr<BaseAST> if_stmt;
+      std::unique_ptr<BaseAST> else_stmt;
+    }ifelse_ty;
+    struct {
+      std::unique_ptr<BaseAST> exp;
+      std::unique_ptr<BaseAST> if_stmt;
+    }if_ty;
+    struct {
         std::unique_ptr<BaseAST> exp;
     }return_ty;
   }data;
 
   void Dump() const override {
+    if(block_end){
+      return;
+    }
     parameter p;   
     if(type == Stmt_Return_Ty){
       data.return_ty.exp->Dump(&p);
@@ -206,6 +220,7 @@ class StmtAST : public BaseAST{
       }
       else
         std::cout << "ret %" << p.p1 << std::endl;
+      block_end = 1;
       //std::cout << (p.p1_temp == 1) ? "%" : "@";
       //std::cout << p.p1 << endl;
     }
@@ -247,8 +262,78 @@ class StmtAST : public BaseAST{
       parameter p;
       data.exp_ty.exp->Dump(&p);
     }
-    else if(type == Stmt_Comma_Ty){
+    else if(type == Stmt_If_Ty){
+      if(block_end){
+        return;
+      }
+      int cur_if_count = if_count;
+      if_count++;
+      parameter p;
+      data.if_ty.exp->Dump(&p);
+      if(p.is_data){
+        std::cout << "  br " << p.p1 << ", %then" << cur_if_count << ", %end" << cur_if_count << std::endl;
+      }
+      else{
+        std::cout << "  br %" << p.p1 << ", %then" << cur_if_count << ", %end" << cur_if_count << std::endl;
+      }
+      
+      //part of then
+      std::cout << "%then" << cur_if_count << ":" << std::endl;
+      block_end = 0; //reset when come to new block
+      data.if_ty.if_stmt->Dump();
+      if(!block_end){
+        std::cout << "  jump %end" << cur_if_count << std::endl;
+      }
+      std::cout << "%end" << cur_if_count << ":" << std::endl;
+      block_end = 0; //reset when come to new block
+      //if_count++;
 
+    }
+    else if(type == Stmt_If_Else_Ty){
+      if(block_end){
+        return;
+      }
+      int cur_if_count = if_count;
+      int if_stmt_end = 1;
+      if_count++;
+      parameter p;
+      data.ifelse_ty.exp->Dump(&p);
+      if(p.is_data){
+        std::cout << "  br " << p.p1 << ", %then" << cur_if_count << ", %else" << cur_if_count << std::endl;
+      }
+      else{
+        std::cout << "  br %" << p.p1 << ", %then" << cur_if_count << ", %else" << cur_if_count << std::endl;
+      }
+      
+      //part of then
+      std::cout << "%then" << cur_if_count << ":" << std::endl;
+      block_end = 0;
+      data.ifelse_ty.if_stmt->Dump();
+      if(!block_end){
+        std::cout << "  jump %end" << cur_if_count << std::endl;
+        if_stmt_end = 0;
+      }
+
+      std::cout << "%else" << cur_if_count << ":" << std::endl;
+      block_end = 0;
+      data.ifelse_ty.else_stmt->Dump();
+      if(!block_end){
+        std::cout << "  jump %end" << cur_if_count << std::endl;
+      }
+
+      if(!(block_end && if_stmt_end)){
+        std::cout << "%end" << cur_if_count << ":" << std::endl;
+      }
+      if(block_end && if_stmt_end){
+        block_end = 1;
+      }
+      //if_count++;
+      //block_end = 0;
+    }
+      
+
+    else if(type == Stmt_Comma_Ty){
+      
     }
   }
   void Dump(parameter_t parameter_)const override {} 
@@ -879,6 +964,9 @@ class DeclAST : public BaseAST {
     }data;
 
     void Dump()const override {
+      if(block_end){
+        return;
+      }
       if(type == Decl_ConstDecl_Ty)
         data.constdecl_ty.constdecl->Dump();
       else

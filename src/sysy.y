@@ -37,7 +37,7 @@ using namespace std;
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN CONST LOR LAND EQ NEQ LE GE
+%token INT RETURN CONST LOR LAND EQ NEQ LE GE IF ELSE
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 
@@ -45,6 +45,8 @@ using namespace std;
 %type <ast_val> FuncDef FuncType Block Stmt Exp LOrExp LAndExp EqExp RelExp AddExp MulExp PrimaryExp LVal UnaryExp UnaryOp Number
 %type <ast_val> BlockItem Decl ConstDecl VarDecl BType ConstDef VarDef ConstInitVal InitVal ConstExp
 //%type <int_val> Number
+%nonassoc ELSE
+%nonassoc LOWER_TNAH_ELSE
 
 %%
 
@@ -275,6 +277,21 @@ Stmt
     auto ast = new StmtAST();
     ast->type = Stmt_Exp_Ty;
     ast->data.exp_ty.exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  | IF '(' Exp ')' Stmt {
+    auto ast = new StmtAST();
+    ast->type = Stmt_If_Ty;
+    ast->data.if_ty.exp = unique_ptr<BaseAST>($3);
+    ast->data.if_ty.if_stmt = unique_ptr<BaseAST>($5);
+    $$ = ast;
+  }
+  | IF '(' Exp ')' Stmt ELSE Stmt {
+    auto ast = new StmtAST();
+    ast->type = Stmt_If_Else_Ty;
+    ast->data.ifelse_ty.exp = unique_ptr<BaseAST>($3);
+    ast->data.ifelse_ty.if_stmt = unique_ptr<BaseAST>($5);
+    ast->data.ifelse_ty.else_stmt = unique_ptr<BaseAST>($7);
     $$ = ast;
   }
   | ';' {
