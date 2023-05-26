@@ -41,6 +41,10 @@ Hexadecimal   0[xX][0-9a-fA-F]+
 "if"            { return IF; }
 "else"          { return ELSE; }
 
+"break"         { return BREAK; }
+"continue"      { return CONTINUE; }
+"while"         { return WHILE; }
+
 {Identifier}    { yylval.str_val = new string(yytext); return IDENT; }
 
 {Decimal}       { yylval.int_val = strtol(yytext, nullptr, 0); return INT_CONST; }
