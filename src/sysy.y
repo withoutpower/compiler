@@ -45,8 +45,8 @@ using namespace std;
 %type <ast_val> FuncDef FuncType Block Stmt Exp LOrExp LAndExp EqExp RelExp AddExp MulExp PrimaryExp LVal UnaryExp UnaryOp Number
 %type <ast_val> BlockItem Decl ConstDecl VarDecl BType ConstDef VarDef ConstInitVal InitVal ConstExp
 //%type <int_val> Number
-%nonassoc ELSE
-%nonassoc LOWER_TNAH_ELSE
+//%nonassoc ELSE
+//%nonassoc LOWER_TNAH_ELSE
 
 %%
 
